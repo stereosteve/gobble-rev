@@ -3,7 +3,6 @@ const minimatch = require('minimatch');
 const path = require('path');
 const mapSeries = require('promise-map-series');
 const sander = require('sander');
-const toposort = require('toposort');
 
 const matchesPatterns = (patterns, filename) =>
 	patterns.some(pattern => minimatch(filename, pattern))
@@ -29,14 +28,21 @@ const buildDepsMap = (basedir, filenames, skip) =>
 	Promise.all(filenames.map(findDeps(basedir, filenames, skip))).then(allDeps =>
 		allDeps.reduce((map, deps, i) => map.set(filenames[i], deps), new Map()));
 
-// topo :: Map(string, [string]) => [string]
+// toposort :: Map(string, [string]) => [string]
 // Run a topological sort on the dependency map, returning a
 // list of filenames that can be processed in order
-const topo = (map) => {
-	const graph = Array.from(map.entries()).reduce((acc, [filename, deps]) =>
-		acc.concat(deps.map(dep => [filename, dep])), []);
+const toposort = function (map) {
+	const graph = [];
+	const standalone = [];
+	for (let [filename, deps] of map.entries()) {
+		if (deps.length > 0) {
+			deps.forEach(dep => graph.push([filename, dep]));
+		} else {
+			standalone.push(filename);
+		}
+	}
 
-	return toposort(graph).reverse();
+	return standalone.concat(require('toposort')(graph).reverse());
 };
 
 const hash = (algo, data) =>
@@ -73,7 +79,7 @@ module.exports = function rev(inputdir, outputdir, options) {
 		buildDepsMap(inputdir, filenames, skipFindDeps).then(allDeps => {
 			const refs = new Map();
 
-			return mapSeries(topo(allDeps), filename => {
+			return mapSeries(toposort(allDeps), filename => {
 				const deps = allDeps.get(filename);
 				const replacements = new Map(deps.map(dep => [dep, refs.get(dep)]));
 				return replace(inputdir, outputdir, filename, replacements, skipRename).then(newFilename => {
