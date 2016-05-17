@@ -20,7 +20,10 @@ const findPaths = paths => content =>
 const findDeps = (basedir, filenames, skip) => filename => {
 	return matchesPatterns(skip, filename)
 		? []
-		: sander.readFile(basedir, filename).then(findPaths(filenames));
+		: sander
+			.readFile(basedir, filename)
+			.then(findPaths(filenames))
+			.then(deps => deps.filter(dep => dep !== filename));
 };
 
 // buildDepsMap :: (string, string, [string]) => Promise Map(string, [string])
