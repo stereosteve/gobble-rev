@@ -13,22 +13,23 @@ const matchesPatterns = (patterns, filename) =>
 const findPaths = paths => content =>
 	paths.filter(path => content.includes(path));
 
-// findDeps :: (string, string, [string]) => string => [string]
+// findDeps :: (string, string, [string], [string]) => string => [string]
 // Return the list of dependencies for a given filename, if the
 // given filename matches the skip list, then the empty list is
 // returned.
-const findDeps = (basedir, filenames, skip) => filename => {
+const findDeps = (basedir, filenames, skip, filter) => filename => {
 	return matchesPatterns(skip, filename)
 		? []
 		: sander
 			.readFile(basedir, filename)
 			.then(findPaths(filenames))
-			.then(deps => deps.filter(dep => dep !== filename));
+			.then(deps =>
+				deps.filter(dep => (dep !== filename) && !(matchesPatterns(filter, dep))));
 };
 
-// buildDepsMap :: (string, string, [string]) => Promise Map(string, [string])
-const buildDepsMap = (basedir, filenames, skip) =>
-	Promise.all(filenames.map(findDeps(basedir, filenames, skip))).then(allDeps =>
+// buildDepsMap :: (string, string, [string], [string]) => Promise Map(string, [string])
+const buildDepsMap = (basedir, filenames, skip, filter) =>
+	Promise.all(filenames.map(findDeps(basedir, filenames, skip, filter))).then(allDeps =>
 		allDeps.reduce((map, deps, i) => map.set(filenames[i], deps), new Map()));
 
 // toposort :: Map(string, [string]) => [string]
@@ -44,7 +45,6 @@ const toposort = function (map) {
 			standalone.push(filename);
 		}
 	}
-
 	return standalone.concat(require('toposort')(graph).reverse());
 };
 
@@ -79,7 +79,7 @@ module.exports = function rev(inputdir, outputdir, options) {
 	const skipFindDeps = options.skipFindDeps || ['*.png', '*.jpg', '*.jpeg', '*.gif'];
 
 	return sander.lsr(inputdir).then(filenames =>
-		buildDepsMap(inputdir, filenames, skipFindDeps).then(allDeps => {
+		buildDepsMap(inputdir, filenames, skipFindDeps, skipRename).then(allDeps => {
 			const refs = new Map();
 
 			return mapSeries(toposort(allDeps), filename => {
