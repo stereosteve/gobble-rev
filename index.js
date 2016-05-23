@@ -77,6 +77,7 @@ const replace = (inputdir, outputdir, filename, replacements, skipRename) =>
 module.exports = function rev(inputdir, outputdir, options) {
 	const skipRename = options.skipRename || ['index.html'];
 	const skipFindDeps = options.skipFindDeps || ['*.png', '*.jpg', '*.jpeg', '*.gif'];
+	var manifest = {};
 
 	return sander.lsr(inputdir).then(filenames =>
 		buildDepsMap(inputdir, filenames, skipFindDeps, skipRename).then(allDeps => {
@@ -87,8 +88,12 @@ module.exports = function rev(inputdir, outputdir, options) {
 				const replacements = new Map(deps.map(dep => [dep, refs.get(dep)]));
 				return replace(inputdir, outputdir, filename, replacements, skipRename).then(newFilename => {
 					refs.set(filename, newFilename);
+					manifest[filename] = newFilename;
 					return newFilename;
 				});
 			});
-		}));
+		}))
+		.then(function() {
+			return sander.writeFile(outputdir, "manifest.json", JSON.stringify(manifest, undefined, 2));
+		});
 };
